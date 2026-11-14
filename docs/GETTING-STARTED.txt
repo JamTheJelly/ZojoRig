@@ -1,0 +1,38 @@
+ZOJO RIG  -  GETTING STARTED (WINDOWS)
+=====================================
+
+WHAT'S IN THIS FOLDER
+  ZOJO RIG.exe     The standalone app. Double-click to play. No install needed.
+  ZOJO RIG.vst3    The plugin version for recording software (Reaper, Ableton, FL Studio, Cakewalk...).
+
+FIRST RUN (STANDALONE APP)
+  1. Plug your guitar into the interface's instrument / Hi-Z input, and plug headphones
+     into the interface (wired - Bluetooth adds too much delay).
+  2. Turn OFF "direct monitor" on the interface if it has that switch.
+  3. Double-click "ZOJO RIG.exe". If Windows SmartScreen warns about an unknown app,
+     click "More info" then "Run anyway" (the app isn't code-signed yet).
+  4. Click "AUDIO SETTINGS" (top right):
+       - Audio device type: pick "ASIO" if your interface has an ASIO driver
+         (e.g. Maono PS22 Lite, Focusrite, Audient). Otherwise pick
+         "Windows Audio (Low Latency Mode)" or "Windows Audio (Exclusive Mode)".
+       - Choose your interface for both input and output.
+       - Buffer size: start at 128 samples. Go lower for less delay; go higher if you
+         hear crackles.
+       - Make sure the input channels are ticked.
+  5. In the I/O strip, set CHANNEL to the input your guitar is on (Input 1, Input 2,
+     or Both). On the Maono PS22 Lite the guitar jack is Input 2.
+  6. Strum hard and set the interface's gain so the INPUT meter gets near the red dots.
+
+TIPS
+  - Static/hiss with high-gain amps: turn on the NOISE GATE (first pedal) and raise
+    THRESH until the gaps between notes are quiet.
+  - Virtual tuning: keep the guitar in standard tuning and pick Eb, D, C#, C, B or A.
+    The TUNER always reads your real strings.
+  - Knobs: drag up/down, use the mouse wheel, double-click to reset.
+  - Presets: pick from the menu; SAVE stores your own in Documents\ZOJO RIG\Presets.
+  - Cabinet: "LOAD IR..." accepts any speaker impulse-response .wav file.
+  - The window can be resized from the bottom-right corner.
+
+USING THE PLUGIN IN A DAW
+  Copy "ZOJO RIG.vst3" into  C:\Program Files\Common Files\VST3\
+  then rescan plugins in your DAW and add ZOJO RIG to a guitar track.
