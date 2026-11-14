@@ -57,6 +57,24 @@ int main (int argc, char** argv)
     p.setPlayConfigDetails (2, 2, 48000, 256);
     p.prepareToPlay (48000, 256);
 
+    // --calibrate: find the Master setting that brings every factory preset to the same loudness
+    if (argc > 1 && juce::String (argv[1]) == "--calibrate")
+    {
+        const double target = 0.16;
+        for (auto& pr : zojo::factoryPresets())
+        {
+            zojo::applyPreset (p.apvts, pr);
+            float lo = 1.0f, hi = 9.5f, m = 5.0f; double r = 0;
+            for (int it = 0; it < 9; ++it)
+            {
+                m = 0.5f * (lo + hi); setP (p, "amp_master", m); r = run (p, 1.5).rms;
+                if (r < target) lo = m; else hi = m;
+            }
+            std::cout << "CAL\t" << pr.name << "\t" << juce::String (m, 1) << "\t" << juce::String (r, 3) << "\n";
+        }
+        return 0;
+    }
+
     std::cout << "Amp models (gain 0 / 5 / 10): peak, rms, realtime factor\n";
     for (int m = 0; m < (int) zojo::ampModels().size(); ++m)
     {
@@ -126,7 +144,7 @@ int main (int argc, char** argv)
     // UI snapshot
     if (argc > 1)
     {
-        zojo::applyPreset (p.apvts, zojo::factoryPresets()[9]);
+        zojo::applyPreset (p.apvts, zojo::factoryPresets().back());
         std::unique_ptr<juce::AudioProcessorEditor> ed (p.createEditor());
         ed->setSize (RigContent::baseW, RigContent::baseH);
         run (p, 0.2);
