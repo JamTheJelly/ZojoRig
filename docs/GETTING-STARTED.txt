@@ -33,6 +33,33 @@ TIPS
   - Cabinet: "LOAD IR..." accepts any speaker impulse-response .wav file.
   - The window can be resized from the bottom-right corner.
 
+PLAYER (SECTION 05) - PLAY ALONG WITH MUSIC
+  Now Playing (left):
+    - Start a song in Spotify, Apple Music, Windows Media Player, or YouTube Music /
+      Tidal in Chrome or Edge. It appears here with the cover art.
+    - Prev / Play / Next control that app; click the dot bar to jump in the song.
+    - Set the song's volume in the music app itself.
+    - Use "Windows Audio" / "Windows Audio (Low Latency Mode)" in AUDIO SETTINGS
+      (not Exclusive Mode), so Windows can mix the music app with your guitar.
+  File player (right) - for your own MP3 / WAV / FLAC / OGG / M4A files:
+    - Click LOAD SONG or drag a file anywhere onto the ZOJO RIG window.
+    - SPEED slows down or speeds up without changing pitch (50-125%).
+    - KEY changes the pitch without changing the speed (-12 to +12 semitones).
+    - SET A / SET B while it plays to loop a tricky section; A-B OFF to stop looping.
+    - FOLLOW TUNING (on by default) shifts the song to match Virtual Tuning, so your
+      usual chord shapes still fit when you play in D standard, B standard, etc.
+    - Streaming services can't be slowed down or looped (their audio is protected),
+      so use the file player for learning parts.
+
 USING THE PLUGIN IN A DAW
   Copy "ZOJO RIG.vst3" into  C:\Program Files\Common Files\VST3\
   then rescan plugins in your DAW and add ZOJO RIG to a guitar track.
+
+PRESET GREETINGS (SOUND CLIPS)
+------------------------------
+Any preset can play a short sound when you pick it.
+1. Open Documents\ZOJO RIG\Sounds (ZOJO RIG creates it the first time you pick a preset).
+2. Put a sound file there named exactly like the preset, e.g. "Neon Rush.wav".
+   WAV, MP3, FLAC, OGG, AIFF and M4A work. Clips longer than 10 seconds are cut off.
+3. Pick the preset and the clip plays once through your output.
+Neon Rush also pops up a "KONNICHIWA!" speech bubble.

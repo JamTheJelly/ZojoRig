@@ -10,7 +10,7 @@ using APVTS = juce::AudioProcessorValueTreeState;
 class ZKnob : public juce::Component
 {
 public:
-    enum class Format { tenths, decibels, percent };
+    enum class Format { tenths, decibels, percent, semitones };
     ZKnob (APVTS&, const juce::String& paramId, const juce::String& label, juce::Colour cap, juce::Colour ind = juce::Colour (0xff0b0b0c),
            Format fmt = Format::tenths);
     void resized() override;
@@ -76,4 +76,19 @@ private:
     juce::uint32 lastNoteTime = 0;
     std::vector<float> buf;
     juce::Rectangle<float> box;
+};
+
+//==============================================================================
+// A speech bubble that pops in, holds and fades (preset greetings)
+class Toast : public juce::Component, private juce::Timer
+{
+public:
+    Toast() { setInterceptsMouseClicks (false, false); }
+    void pop (const juce::String& t) { text = t; start = juce::Time::getMillisecondCounterHiRes(); setVisible (true); startTimerHz (60); repaint(); }
+    void paint (juce::Graphics&) override;
+    double age() const { return (juce::Time::getMillisecondCounterHiRes() - start) / 1000.0; }
+    static constexpr double life = 2.6;
+private:
+    void timerCallback() override { if (age() > life) { stopTimer(); setVisible (false); } else repaint(); }
+    juce::String text; double start = 0;
 };

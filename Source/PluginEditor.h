@@ -3,6 +3,8 @@
 #include "PluginProcessor.h"
 #include "UI/ZojoLookAndFeel.h"
 #include "UI/Widgets.h"
+#include "UI/PlayerPanel.h"
+#include "UI/Flames.h"
 
 //==============================================================================
 class AmpPanel : public juce::Component
@@ -35,18 +37,22 @@ private:
 };
 
 //==============================================================================
-class RigContent : public juce::Component, private juce::Timer
+class RigContent : public juce::Component, public juce::FileDragAndDropTarget, private juce::Timer
 {
 public:
     explicit RigContent (ZojoRigProcessor&);
     ~RigContent() override;
     void paint (juce::Graphics&) override;
     void resized() override;
-    static constexpr int baseW = 1280, baseH = 1006;
+    bool isInterestedInFileDrag (const juce::StringArray& files) override;
+    void filesDropped (const juce::StringArray& files, int, int) override;
+    static constexpr int baseW = 1280, baseH = 1240;
 private:
     void timerCallback() override;
     void rebuildPresetMenu();
     void savePresetDialog();
+    void updateTheme();
+    void repaintFireRegions();
     void sectionLabel (juce::Graphics&, int y, const juce::String& num, const juce::String& title, const juce::String& sub);
 
     ZojoRigProcessor& proc;
@@ -59,15 +65,22 @@ private:
     std::vector<std::unique_ptr<Pedal>> pre, post;
     AmpPanel amp;
     CabPanel cab;
+    PlayerPanel playerPanel;
     TunerOverlay tuner;
     std::unique_ptr<juce::AlertWindow> saveWindow;
     juce::Rectangle<int> ioArea, tuningArea, inMeterArea, outMeterArea;
     juce::String currentPresetName;
     int lastTuning = -1;
+
+    // Fern Burn theme
+    bool burn = false;
+    zc::FireField bgFire, headerFire;
+    float glint = -1.0f;
+    int frame = 0;
 };
 
 //==============================================================================
-class ZojoRigEditor : public juce::AudioProcessorEditor
+class ZojoRigEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
     explicit ZojoRigEditor (ZojoRigProcessor&);
@@ -75,7 +88,13 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 private:
+    void timerCallback() override;
+    void buildContent();
+    ZojoRigProcessor& proc;
     ZojoLookAndFeel lnf;
-    RigContent content;
+    std::unique_ptr<RigContent> content;
+    juce::String palette;
+    Toast toast;
+    int lastToast = 0;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ZojoRigEditor)
 };

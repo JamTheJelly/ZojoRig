@@ -3,10 +3,13 @@
 
 namespace zc
 {
-const juce::Colour paper { 0xff09090a }, module { 0xff131315 }, module2 { 0xff161618 }, ink { 0xffecece6 }, sub { 0xff7b7b76 },
-                   hair { 0xff26262a }, key { 0xff1f1f23 }, dotOff { 0xff29292d }, red { 0xffff3b30 }, blue { 0xff3d7bff },
-                   green { 0xff2fd47a }, orange { 0xffff7a2e }, yellow { 0xffffd23f }, white { 0xfff4f4ef }, cyan { 0xff2ee6d6 },
-                   violet { 0xffa17dff }, black { 0xff050505 };
+// The active palette. Presets can switch it (see setPalette); the editor rebuilds its UI when it changes.
+inline juce::Colour paper { 0xff09090a }, module { 0xff131315 }, module2 { 0xff161618 }, ink { 0xffecece6 }, sub { 0xff7b7b76 },
+                    hair { 0xff26262a }, key { 0xff1f1f23 }, dotOff { 0xff29292d }, red { 0xffff3b30 }, blue { 0xff3d7bff },
+                    green { 0xff2fd47a }, orange { 0xffff7a2e }, yellow { 0xffffd23f }, white { 0xfff4f4ef }, cyan { 0xff2ee6d6 },
+                    violet { 0xffa17dff }, black { 0xff050505 }, grid { 0xff1a1a1d };
+// "default" or "neon" (cyberpunk: teal, hot pink, electric violet on deep indigo)
+void setPalette (const juce::String& name);
 juce::Font mono (float size, bool bold = false);
 juce::Font sans (float size);
 inline float textWidth (const juce::Font& f, const juce::String& t) { return juce::GlyphArrangement::getStringWidth (f, t); }
@@ -22,6 +25,7 @@ class ZojoLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     ZojoLookAndFeel();
+    void applyPalette();   // re-read zc:: colours into the JUCE colour IDs
     void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos, float startAngle, float endAngle, juce::Slider&) override;
     void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour&, bool highlighted, bool down) override;
     void drawButtonText (juce::Graphics&, juce::TextButton&, bool highlighted, bool down) override;

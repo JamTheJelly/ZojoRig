@@ -4,6 +4,7 @@
 #include <atomic>
 #include "Dsp.h"
 #include "Params.h"
+#include "Player.h"
 
 class ZojoRigProcessor : public juce::AudioProcessor
 {
@@ -47,8 +48,19 @@ public:
     double copyTunerSamples (float* dest, int n) const;
 
     juce::File irFile;
+    FilePlayer player;   // practice player: plays a song under the guitar
+
+    // Preset greeting: a short sound clip played once when a preset is picked (message thread)
+    void playGreeting (const juce::File& file);
+    // UI pop-up request (e.g. Neon Rush's speech bubble); the editor watches the serial number
+    juce::String toastText;
+    std::atomic<int> toastSerial { 0 };
 
 private:
+    juce::SpinLock greetLock;
+    juce::AudioBuffer<float> greetBuf;
+    int greetPos = -1;
+
     float p (const char* id) const { return apvts.getRawParameterValue (id)->load(); }
     void updateParams();
 

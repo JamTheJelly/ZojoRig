@@ -180,10 +180,11 @@ void CabPanel::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-RigContent::RigContent (ZojoRigProcessor& p) : proc (p), amp (p), cab (p), tuner (p)
+RigContent::RigContent (ZojoRigProcessor& p) : proc (p), amp (p), cab (p), playerPanel (p), tuner (p)
 {
     auto& s = proc.apvts;
 
+    currentPresetName = proc.apvts.state.getProperty ("presetName").toString();
     rebuildPresetMenu();
     presetBox.setTextWhenNothingSelected ("Presets");
     presetBox.onChange = [this]
@@ -193,6 +194,9 @@ RigContent::RigContent (ZojoRigProcessor& p) : proc (p), amp (p), cab (p), tuner
         const auto& fp = zojo::factoryPresets();
         if (id <= (int) fp.size()) { zojo::applyPreset (proc.apvts, fp[(size_t) id - 1]); currentPresetName = fp[(size_t) id - 1].name; }
         else { currentPresetName = presetBox.getText(); zojo::loadUserPreset (proc, currentPresetName); }
+        proc.apvts.state.setProperty ("presetName", currentPresetName, nullptr);
+        if (auto f = zojo::greetingFileFor (currentPresetName); f.existsAsFile()) proc.playGreeting (f);
+        if (zojo::currentTheme (proc.apvts) == "neon") { proc.toastText = "KONNICHIWA!"; ++proc.toastSerial; }
     };
     addAndMakeVisible (presetBox);
     savePreset.onClick = [this] { savePresetDialog(); };
@@ -238,14 +242,27 @@ RigContent::RigContent (ZojoRigProcessor& p) : proc (p), amp (p), cab (p), tuner
     post.push_back (std::make_unique<Pedal> (s, 10, "VRB", "Reverb", zc::orange, "rev_on", std::vector<Pedal::KnobSpec> { { "rev_size", "Size" }, { "rev_mix", "Mix" } }));
     for (auto& ped : pre) addAndMakeVisible (*ped);
     for (auto& ped : post) addAndMakeVisible (*ped);
-    addAndMakeVisible (amp); addAndMakeVisible (cab);
+    addAndMakeVisible (amp); addAndMakeVisible (cab); addAndMakeVisible (playerPanel);
     addChildComponent (tuner);
 
     setSize (baseW, baseH);
+    updateTheme();
     startTimerHz (30);
 }
 
 RigContent::~RigContent() { proc.tunerMute = false; }
+
+bool RigContent::isInterestedInFileDrag (const juce::StringArray& files)
+{
+    for (auto& f : files) if (juce::File (f).hasFileExtension ("mp3;wav;flac;ogg;aif;aiff;m4a;wma")) return true;
+    return false;
+}
+
+void RigContent::filesDropped (const juce::StringArray& files, int, int)
+{
+    for (auto& f : files)
+        if (juce::File (f).hasFileExtension ("mp3;wav;flac;ogg;aif;aiff;m4a;wma")) { playerPanel.loadFile (juce::File (f)); return; }
+}
 
 void RigContent::rebuildPresetMenu()
 {
@@ -278,17 +295,51 @@ void RigContent::savePresetDialog()
         if (result == 1 && saveWindow != nullptr)
         {
             const auto name = saveWindow->getTextEditorContents ("name").trim();
-            if (name.isNotEmpty() && zojo::saveUserPreset (proc, name)) { currentPresetName = juce::File::createLegalFileName (name); rebuildPresetMenu(); }
+            if (name.isNotEmpty() && zojo::saveUserPreset (proc, name)) { currentPresetName = juce::File::createLegalFileName (name); proc.apvts.state.setProperty ("presetName", currentPresetName, nullptr); rebuildPresetMenu(); }
         }
         saveWindow.reset();
     }), false);
 }
 
+void RigContent::updateTheme()
+{
+    const bool b = zojo::currentTheme (proc.apvts) == "fernburn";
+    if (b == burn) return;
+    burn = b;
+    if (burn)
+    {
+        bgFire.configure (baseW / 12 + 1, baseH / 12 + 1, 1.2f, 0.16f, 2.4f, 4.4f);       // flames rising from the floor
+        headerFire.configure (baseW / 8, 10, 0.9f, 0.42f, 2.0f, 4.6f);               // flames licking behind the logo
+        bgFire.warm (90); headerFire.warm (30);
+    }
+    repaint();
+}
+
+void RigContent::repaintFireRegions()
+{
+    // repaint only background that isn't covered by panels, so the fire costs little CPU
+    juce::RectangleList<int> area (getLocalBounds());
+    for (auto* c : getChildren())
+        if (c->isVisible() && c != &tuner) area.subtract (c->getBounds());
+    area.subtract (ioArea.reduced (8));
+    area.add ({ 0, 0, baseW, 84 });  // header: chrome logo + glint
+    for (auto& r : area) repaint (r);
+}
+
 void RigContent::timerCallback()
 {
+    updateTheme();
+    if (burn)
+    {
+        bgFire.step(); headerFire.step();
+        frame = (frame + 1) % 150;                          // glint sweeps the logo every 5 s
+        glint = frame < 40 ? (float) frame / 40.0f : -1.0f;
+        if (! tuner.isVisible()) repaintFireRegions();
+    }
+
     inMeter.setLevel (proc.inPeak.exchange (0.0f));
     outMeter.setLevel (proc.outPeak.exchange (0.0f));
-    amp.refresh(); cab.refresh();
+    amp.refresh(); cab.refresh(); playerPanel.refresh();
     for (auto& ped : pre) ped->refresh();
     for (auto& ped : post) ped->refresh();
     const int t = getChoice (proc.apvts, "tuning");
@@ -344,6 +395,7 @@ void RigContent::resized()
         post[0]->setBounds (m, 788, eqW, pedalH);
         for (int i = 1; i < 6; ++i) post[(size_t) i]->setBounds (m + eqW + 10 + (i - 1) * (pw + 10), 788, pw, pedalH);
     }
+    playerPanel.setBounds (m, 1026, W, 196);
     tuner.setBounds (getLocalBounds());
 }
 
@@ -352,7 +404,9 @@ void RigContent::sectionLabel (juce::Graphics& g, int y, const juce::String& num
     const int x = 20;
     g.setFont (zc::mono (10.0f, true));
     const int nw = (int) zc::textWidth (zc::mono (10.0f, true), num) + 12;
-    g.setColour (zc::ink); g.fillRoundedRectangle ((float) x, (float) y, (float) nw, 16, 4);
+    if (burn) g.setGradientFill (zc::chromeGradient ({ (float) x, (float) y - 2, (float) nw, 20 }));
+    else g.setColour (zc::ink);
+    g.fillRoundedRectangle ((float) x, (float) y, (float) nw, 16, 4);
     g.setColour (zc::paper); g.drawText (num, x, y, nw, 16, juce::Justification::centred);
     g.setColour (zc::ink); g.drawText (title.toUpperCase(), x + nw + 10, y, 200, 16, juce::Justification::centredLeft);
     const int tw = (int) zc::textWidth (zc::mono (10.0f, true), title.toUpperCase());
@@ -368,8 +422,38 @@ void RigContent::paint (juce::Graphics& g)
     g.fillAll (zc::paper);
     g.setGradientFill (juce::ColourGradient (zc::red.withAlpha (0.07f), (float) baseW * 0.5f, -80, juce::Colours::transparentBlack, (float) baseW * 0.5f, 420, true));
     g.fillRect (getLocalBounds());
-    zc::drawDotGrid (g, getLocalBounds().toFloat(), 16.0f, 1.0f, juce::Colour (0xff1a1a1d));
+    zc::drawDotGrid (g, getLocalBounds().toFloat(), 16.0f, 1.0f, zc::grid);
 
+    if (burn)
+    {
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xffff4a10).withAlpha (0.16f), 0, (float) baseH,
+                                                 juce::Colours::transparentBlack, 0, (float) baseH * 0.45f, false));
+        g.fillRect (getLocalBounds());
+        bgFire.draw (g, { 0.0f, (float) baseH - (float) (baseH / 12 + 1) * 12.0f }, 12.0f);
+        headerFire.draw (g, { 0.0f, 4.0f }, 8.0f);
+
+        // chrome logo + edition tag
+        const auto logoFont = zc::mono (48.0f, true).withExtraKerningFactor (-0.04f);
+        zc::drawChromeText (g, "ZOJO RIG", { 20.0f, 12.0f, 270.0f, 46.0f }, logoFont, -0.18f, glint, true);
+        zc::drawChromeText (g, "FERN BURN", { 312.0f, 24.0f, 220.0f, 30.0f }, zc::mono (30.0f, true), -0.22f,
+                            glint < 0 ? -1.0f : glint * 1.4f - 0.4f, true);
+        g.setColour (zc::orange); g.setFont (zc::mono (9.0f, true));
+        g.drawText ("AMP SIMULATOR  -  FERN BURN EDITION", 22, 60, 400, 12, juce::Justification::centredLeft);
+    }
+    else if (zojo::currentTheme (proc.apvts) == "neon")
+    {
+        g.setGradientFill (juce::ColourGradient (zc::cyan.withAlpha (0.10f), (float) baseW, (float) baseH,
+                                                 juce::Colours::transparentBlack, (float) baseW * 0.4f, (float) baseH * 0.5f, true));
+        g.fillRect (getLocalBounds());
+        zc::drawDotMatrixText (g, "ZOJO RIG", { 20.0f, 10.0f, 320.0f, 50.0f }, 48.0f, zc::red, 2.9f, juce::Justification::centredLeft, true);
+        g.setGradientFill (juce::ColourGradient (zc::red.withAlpha (0.16f), 160.0f, -60.0f, juce::Colours::transparentBlack, 160.0f, 260.0f, true));
+        g.fillRect (getLocalBounds());
+        zc::drawDotMatrixText (g, "NEON RUSH", { 196.0f, 10.0f, 420.0f, 50.0f }, 40.0f, zc::cyan, 2.6f, juce::Justification::centredLeft, true);
+        g.setColour (zc::violet); g.setFont (zc::mono (9.0f, true));
+        g.drawText ("AMP SIMULATOR  -  NEON RUSH EDITION", 22, 60, 400, 12, juce::Justification::centredLeft);
+    }
+    else
+    {
     // logo
     zc::drawDotMatrixText (g, "ZOJO RIG", { 20.0f, 10.0f, 320.0f, 50.0f }, 48.0f, zc::ink, 2.9f, juce::Justification::centredLeft, false);
     const float lw = zc::textWidth (zc::mono (48.0f, true).withExtraKerningFactor (-0.04f), "ZOJO RIG");
@@ -377,11 +461,13 @@ void RigContent::paint (juce::Graphics& g)
     juce::DropShadow (zc::red, 10, {}).drawForPath (g, rd); g.setColour (zc::red); g.fillPath (rd);
     g.setColour (zc::sub); g.setFont (zc::mono (9.0f, true));
     g.drawText ("AMP SIMULATOR  -  ZR-1", 22, 60, 300, 12, juce::Justification::centredLeft);
+    }
 
     sectionLabel (g, 84, "01", "I/O", "input - virtual tuning - levels");
     sectionLabel (g, 226, "02", "Pre", "stompboxes before the amp");
     sectionLabel (g, 460, "03", "Amp + Cab", "preamp - tone stack - power amp - speaker");
     sectionLabel (g, 766, "04", "Post", "effects after the amp");
+    sectionLabel (g, 1004, "05", "Player", "play along - your music app or a song file");
 
     zc::drawModule (g, ioArea.toFloat());
     g.setFont (zc::mono (9.0f, true));
@@ -401,11 +487,16 @@ void RigContent::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-ZojoRigEditor::ZojoRigEditor (ZojoRigProcessor& p) : AudioProcessorEditor (&p), content (p)
+static juce::String paletteFor (const juce::String& theme) { return theme == "neon" ? "neon" : "default"; }
+
+ZojoRigEditor::ZojoRigEditor (ZojoRigProcessor& p) : AudioProcessorEditor (&p), proc (p)
 {
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
     setLookAndFeel (&lnf);
-    addAndMakeVisible (content);
+    addChildComponent (toast);
+    lastToast = proc.toastSerial.load();
+    buildContent();
+    startTimerHz (15);
 
     unmuteStandaloneInput();  // it's a guitar rig: hear the input
 
@@ -420,8 +511,30 @@ ZojoRigEditor::ZojoRigEditor (ZojoRigProcessor& p) : AudioProcessorEditor (&p), 
     setSize ((int) (RigContent::baseW * scale), (int) (RigContent::baseH * scale));
 }
 
+void ZojoRigEditor::buildContent()
+{
+    palette = paletteFor (zojo::currentTheme (proc.apvts));
+    content.reset();
+    zc::setPalette (palette);
+    lnf.applyPalette();
+    content = std::make_unique<RigContent> (proc);
+    addAndMakeVisible (*content);
+    toast.toFront (false);
+    resized();
+    repaint();
+}
+
+// A preset that changes the palette rebuilds the UI so every colour picks it up
+void ZojoRigEditor::timerCallback()
+{
+    if (paletteFor (zojo::currentTheme (proc.apvts)) != palette) buildContent();
+    if (const int s = proc.toastSerial.load(); s != lastToast) { lastToast = s; toast.pop (proc.toastText); toast.toFront (false); }
+}
+
 ZojoRigEditor::~ZojoRigEditor()
 {
+    stopTimer();
+    content.reset();
     setLookAndFeel (nullptr);
     juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
 }
@@ -431,6 +544,9 @@ void ZojoRigEditor::paint (juce::Graphics& g) { g.fillAll (zc::paper); }
 void ZojoRigEditor::resized()
 {
     const float s = (float) getWidth() / (float) RigContent::baseW;
-    content.setBounds (0, 0, RigContent::baseW, RigContent::baseH);
-    content.setTransform (juce::AffineTransform::scale (s));
+    if (content == nullptr) return;
+    content->setBounds (0, 0, RigContent::baseW, RigContent::baseH);
+    content->setTransform (juce::AffineTransform::scale (s));
+    toast.setBounds (420, 52, 460, 150);
+    toast.setTransform (juce::AffineTransform::scale (s));
 }

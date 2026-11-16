@@ -4,7 +4,7 @@
 namespace zojo
 {
 // Settings that belong to your rig rather than to a sound; presets leave them alone.
-static bool isRigSetting (const juce::String& id) { return id == "input_gain" || id == "input_ch" || id == "out_volume"; }
+static bool isRigSetting (const juce::String& id) { return id == "input_gain" || id == "input_ch" || id == "out_volume" || id.startsWith ("ply_"); }
 
 const std::vector<Preset>& factoryPresets()
 {
@@ -121,7 +121,28 @@ const std::vector<Preset>& factoryPresets()
             { "dbl_on", 1 }, { "dbl_width", 5 }, { "dbl_time", 3.5f },
             { "cho_on", 1 }, { "cho_rate", 1.5f }, { "cho_depth", 3 }, { "cho_mix", 2 },
             { "dly_on", 1 }, { "dly_time", 5.5f }, { "dly_feedback", 4 }, { "dly_mix", 3 },
-            { "rev_on", 1 }, { "rev_size", 6.5f }, { "rev_mix", 3 } } } };
+            { "rev_on", 1 }, { "rev_size", 6.5f }, { "rev_mix", 3 } } },
+        // "Fern Burn", built for fernplants: articulate shred at high tempos. Tight boost, moderate gain,
+        // pushed mids, trimmed lows and fizz, fast gate, and short, quiet ambience so runs don't smear.
+        { "Fern Burn", "ZOJO Custom", { { "gate_on", 1 }, { "gate_thresh", 5 }, { "gate_release", 1.5f },
+            { "comp_on", 1 }, { "comp_sustain", 2.5f }, { "comp_level", 5 },
+            { "od_on", 1 }, { "od_drive", 0 }, { "od_tone", 6.5f }, { "od_level", 8 },
+            { "amp_model", 5 }, { "amp_master", 4.7f }, { "amp_gain", 5.5f }, { "amp_bass", 4.5f }, { "amp_mid", 6.5f }, { "amp_treble", 6 }, { "amp_presence", 6 },
+            { "cab_type", 2 },
+            { "eq_on", 1 }, { "eq_b1", 4.2f }, { "eq_b2", 4.4f }, { "eq_b3", 5.8f }, { "eq_b4", 5.6f }, { "eq_b5", 4.4f },
+            { "dly_on", 1 }, { "dly_time", 3.8f }, { "dly_feedback", 2.5f }, { "dly_mix", 1.8f },
+            { "rev_on", 1 }, { "rev_size", 4.5f }, { "rev_mix", 1.5f } }, "fernburn" },
+        // "Neon Rush": anime-opening / J-rock and power-metal lead. Bright, polished, compressed and singing,
+        // with a wide doubled wall, soaring delay and a big-stage reverb.
+        { "Neon Rush", "ZOJO Custom", { { "gate_on", 1 }, { "gate_thresh", 4 }, { "gate_release", 2.5f },
+            { "comp_on", 1 }, { "comp_sustain", 4 }, { "comp_level", 5 },
+            { "od_on", 1 }, { "od_drive", 1.5f }, { "od_tone", 7 }, { "od_level", 7.5f },
+            { "amp_model", 3 }, { "amp_master", 4.3f }, { "amp_gain", 7 }, { "amp_bass", 5 }, { "amp_mid", 6 }, { "amp_treble", 7 }, { "amp_presence", 6.5f },
+            { "cab_type", 2 },
+            { "eq_on", 1 }, { "eq_b1", 4.6f }, { "eq_b2", 4.4f }, { "eq_b3", 5.4f }, { "eq_b4", 6.2f }, { "eq_b5", 5.6f },
+            { "dbl_on", 1 }, { "dbl_width", 6.5f }, { "dbl_time", 3 },
+            { "dly_on", 1 }, { "dly_time", 4.8f }, { "dly_feedback", 3.5f }, { "dly_mix", 3 },
+            { "rev_on", 1 }, { "rev_size", 6 }, { "rev_mix", 2.5f } }, "neon" } };
     return p;
 }
 
@@ -138,6 +159,19 @@ void applyPreset (juce::AudioProcessorValueTreeState& s, const Preset& preset)
             if (! isRigSetting (r->getParameterID()) && r->getParameterID() != "tuning")
                 r->setValueNotifyingHost (r->getDefaultValue());
     for (auto& [id, v] : preset.values) setParam (s, id, v);
+    s.state.setProperty ("theme", preset.theme, nullptr);
+}
+
+juce::String currentTheme (const juce::AudioProcessorValueTreeState& s) { return s.state.getProperty ("theme").toString(); }
+
+juce::File greetingFileFor (const juce::String& presetName)
+{
+    auto dir = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("ZOJO RIG").getChildFile ("Sounds");
+    dir.createDirectory();
+    const auto base = juce::File::createLegalFileName (presetName);
+    for (auto* ext : { ".wav", ".mp3", ".flac", ".ogg", ".aiff", ".aif", ".m4a" })
+        if (auto f = dir.getChildFile (base + ext); f.existsAsFile()) return f;
+    return {};
 }
 
 juce::File userPresetDir()
@@ -165,6 +199,7 @@ bool saveUserPreset (ZojoRigProcessor& proc, const juce::String& name)
             if (! isRigSetting (r->getParameterID()))
                 xml.setAttribute (r->getParameterID(), (double) r->convertFrom0to1 (r->getValue()));
     if (proc.hasIR()) xml.setAttribute ("irPath", proc.irFile.getFullPathName());
+    if (currentTheme (proc.apvts).isNotEmpty()) xml.setAttribute ("theme", currentTheme (proc.apvts));
     return xml.writeTo (userPresetDir().getChildFile (clean + ".zojopreset"));
 }
 
@@ -179,6 +214,7 @@ bool loadUserPreset (ZojoRigProcessor& proc, const juce::String& name)
             if (! isRigSetting (id) && xml->hasAttribute (id))
                 r->setValueNotifyingHost (r->convertTo0to1 ((float) xml->getDoubleAttribute (id)));
         }
+    proc.apvts.state.setProperty ("theme", xml->getStringAttribute ("theme"), nullptr);
     const juce::File ir (xml->getStringAttribute ("irPath"));
     if (ir.existsAsFile()) proc.loadImpulseResponse (ir);
     return true;

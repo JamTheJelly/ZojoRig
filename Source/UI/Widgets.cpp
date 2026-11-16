@@ -13,7 +13,7 @@ ZKnob::ZKnob (APVTS& s, const juce::String& id, const juce::String& l, juce::Col
     slider.setPopupDisplayEnabled (false, false, nullptr);
     slider.getProperties().set ("cap", (juce::int64) cap.getARGB());
     slider.getProperties().set ("ind", (juce::int64) ind.getARGB());
-    slider.getProperties().set ("bipolar", f == Format::decibels);
+    slider.getProperties().set ("bipolar", f == Format::decibels || f == Format::semitones);
     slider.onValueChange = [this] { repaint(); };
     addAndMakeVisible (slider);
     attachment = std::make_unique<APVTS::SliderAttachment> (s, id, slider);
@@ -31,6 +31,8 @@ void ZKnob::paint (juce::Graphics& g)
     const float v = (float) slider.getValue();
     juce::String val;
     if (format == Format::decibels) { const float d = (v - 5.0f) * 2.4f; val = (d > 0 ? "+" : "") + juce::String (d, 1); }
+    else if (format == Format::percent) val = juce::String (juce::roundToInt (v)) + "%";
+    else if (format == Format::semitones) { const int st = juce::roundToInt (v); val = (st > 0 ? "+" : "") + juce::String (st) + " st"; }
     else val = juce::String (v, 1);
     const int top = slider.getBottom() - 2;
     g.setColour (labelColour); g.setFont (zc::mono (9.5f, true));
@@ -210,4 +212,28 @@ void TunerOverlay::paint (juce::Graphics& g)
     }
     g.setColour (juce::Colour (0xff9b9b94)); g.setFont (zc::mono (11.0f));
     g.drawText (freqText, r.removeFromTop (22), juce::Justification::centred);
+}
+
+//==============================================================================
+void Toast::paint (juce::Graphics& g)
+{
+    const double t = age();
+    // pop in with a little overshoot, then fade out
+    const float in = (float) juce::jlimit (0.0, 1.0, t / 0.28);
+    const float back = 1.0f + 2.7f * std::pow (in - 1.0f, 3.0f) + 1.7f * std::pow (in - 1.0f, 2.0f);
+    const float alpha = (float) juce::jlimit (0.0, 1.0, (life - t) / 0.5);
+    const auto full = getLocalBounds().toFloat().reduced (14);
+    const auto box = full.withSizeKeepingCentre (full.getWidth() * back, (full.getHeight() - 16) * back).withY (full.getY());
+    if (box.getWidth() < 4) return;
+
+    g.setOpacity (alpha);
+    juce::Path bubble;
+    bubble.addRoundedRectangle (box, 22.0f);
+    const float tx = box.getX() + box.getWidth() * 0.22f;
+    bubble.addTriangle (tx, box.getBottom() - 2, tx + 26, box.getBottom() - 2, tx - 6, box.getBottom() + 18 * back);
+    juce::DropShadow (zc::red.withAlpha (0.7f * alpha), 22, {}).drawForPath (g, bubble);
+    g.setColour (zc::module.withAlpha (alpha)); g.fillPath (bubble);
+    g.setColour (zc::red.withAlpha (alpha)); g.strokePath (bubble, juce::PathStrokeType (2.5f));
+    if (in > 0.6f)
+        zc::drawDotMatrixText (g, text, box.reduced (16, 6), 74.0f, zc::cyan.withAlpha (alpha), 3.3f, juce::Justification::centred, true);
 }

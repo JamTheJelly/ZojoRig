@@ -68,7 +68,31 @@ void zc::drawDotMatrixText (juce::Graphics& g, const juce::String& text, juce::R
 }
 
 //==============================================================================
-ZojoLookAndFeel::ZojoLookAndFeel()
+void zc::setPalette (const juce::String& name)
+{
+    if (name == "neon")
+    {
+        paper = juce::Colour (0xff0a0820); module = juce::Colour (0xff141039); module2 = juce::Colour (0xff181343);
+        ink = juce::Colour (0xffeafcff); sub = juce::Colour (0xff8f8ad0); hair = juce::Colour (0xff2e2868);
+        key = juce::Colour (0xff221c56); dotOff = juce::Colour (0xff2c2668); grid = juce::Colour (0xff1c1848);
+        red = juce::Colour (0xffff2e93); blue = juce::Colour (0xff5b6bff); green = juce::Colour (0xff22f0cf);
+        orange = juce::Colour (0xffff6ad5); yellow = juce::Colour (0xfffff15c); white = juce::Colour (0xfff2fbff);
+        cyan = juce::Colour (0xff00f0ff); violet = juce::Colour (0xffb65cff);
+    }
+    else
+    {
+        paper = juce::Colour (0xff09090a); module = juce::Colour (0xff131315); module2 = juce::Colour (0xff161618);
+        ink = juce::Colour (0xffecece6); sub = juce::Colour (0xff7b7b76); hair = juce::Colour (0xff26262a);
+        key = juce::Colour (0xff1f1f23); dotOff = juce::Colour (0xff29292d); grid = juce::Colour (0xff1a1a1d);
+        red = juce::Colour (0xffff3b30); blue = juce::Colour (0xff3d7bff); green = juce::Colour (0xff2fd47a);
+        orange = juce::Colour (0xffff7a2e); yellow = juce::Colour (0xffffd23f); white = juce::Colour (0xfff4f4ef);
+        cyan = juce::Colour (0xff2ee6d6); violet = juce::Colour (0xffa17dff);
+    }
+}
+
+ZojoLookAndFeel::ZojoLookAndFeel() { applyPalette(); }
+
+void ZojoLookAndFeel::applyPalette()
 {
     setColour (juce::ResizableWindow::backgroundColourId, zc::paper);
     setColour (juce::PopupMenu::backgroundColourId, zc::module);

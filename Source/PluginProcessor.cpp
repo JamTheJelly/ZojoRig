@@ -55,6 +55,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout zojo::createLayout()
     ps.push_back (onParam ("dly_on", "Delay On")); ps.push_back (knobParam ("dly_time", "Delay Time", 4.5f)); ps.push_back (knobParam ("dly_feedback", "Delay Repeats", 3.5f)); ps.push_back (knobParam ("dly_mix", "Delay Mix", 3));
     ps.push_back (onParam ("rev_on", "Reverb On", true)); ps.push_back (knobParam ("rev_size", "Reverb Size", 4)); ps.push_back (knobParam ("rev_mix", "Reverb Mix", 2.5f));
     ps.push_back (knobParam ("out_volume", "Volume", 5));
+
+    // practice player (not stored in presets)
+    ps.push_back (knobParam ("ply_volume", "Player Volume", 6));
+    ps.push_back (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "ply_speed", 1 }, "Player Speed",
+        juce::NormalisableRange<float> (50.0f, 125.0f, 1.0f), 100.0f,
+        juce::AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return juce::String ((int) v) + "%"; })));
+    ps.push_back (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "ply_key", 1 }, "Player Key",
+        juce::NormalisableRange<float> (-12.0f, 12.0f, 1.0f), 0.0f,
+        juce::AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return (v > 0 ? "+" : "") + juce::String ((int) v) + " st"; })));
+    ps.push_back (onParam ("ply_follow", "Player Follows Tuning", true));
+    ps.push_back (onParam ("ply_loop", "Player Loop Song", false));
     return { ps.begin(), ps.end() };
 }
 
@@ -98,6 +109,7 @@ void ZojoRigProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     doubler.prepare (sr); chorus.prepare (sr); delay.prepare (sr);
     phaser.prepare ({ sr, (juce::uint32) maxBlock, 2 }); phaser.setCentreFrequency (900.0f); phaser.setFeedback (0.35f);
     reverb.prepare ({ sr, (juce::uint32) maxBlock, 2 });
+    player.prepare (sr, maxBlock);
 
     for (auto* s : { &inGain, &outGain, &tuneMix, &gateMix, &compMix, &compMake, &eqMix, &muteGain }) s->reset (sr, 0.02);
     for (auto* s : { &odMix, &odDrive, &odLevel, &fzMix, &fzDrive, &fzLevel }) s->reset (osr, 0.02);
@@ -256,19 +268,69 @@ void ZojoRigProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
         { juce::dsp::ProcessContextReplacing<float> ctx (ssub); phaser.process (ctx); }
         { juce::dsp::ProcessContextReplacing<float> ctx (ssub); reverb.process (ctx); }
 
-        // 6) output volume, tuner mute, meters
+        // 6) output volume, tuner mute, then the practice player underneath, meters
         for (int i = 0; i < n; ++i)
         {
             const float g = outGain.getNextValue() * muteGain.getNextValue();
             L[i] *= g; R[i] *= g;
-            outPk = std::max (outPk, std::max (std::abs (L[i]), std::abs (R[i])));
         }
+        {
+            const float pv = p ("ply_volume");
+            const int tIdx = juce::jlimit (0, (int) tunings().size() - 1, (int) p ("tuning"));
+            const float keyShift = p ("ply_key") + (p ("ply_follow") > 0.5f ? (float) tunings()[(size_t) tIdx].semis : 0.0f);
+            player.setLoopWholeSong (p ("ply_loop") > 0.5f);
+            player.process (L, R, n, p ("ply_speed") / 100.0f, keyShift,
+                            tunerMute.load() || pv <= 0 ? 0.0f : dbToGain (-30.0f + pv * 4.0f));
+        }
+        {
+            const juce::SpinLock::ScopedTryLockType lock (greetLock);
+            if (lock.isLocked() && greetPos >= 0)
+            {
+                const int m = std::min (n, greetBuf.getNumSamples() - greetPos);
+                for (int i = 0; i < m; ++i)
+                {
+                    L[i] += 0.8f * greetBuf.getSample (0, greetPos + i);
+                    R[i] += 0.8f * greetBuf.getSample (1, greetPos + i);
+                }
+                greetPos += m;
+                if (greetPos >= greetBuf.getNumSamples()) greetPos = -1;
+            }
+        }
+        for (int i = 0; i < n; ++i) outPk = std::max (outPk, std::max (std::abs (L[i]), std::abs (R[i])));
         if (nOut >= 2) { buffer.copyFrom (0, start, stereo, 0, 0, n); buffer.copyFrom (1, start, stereo, 1, 0, n); }
         else if (nOut == 1) { buffer.copyFrom (0, start, stereo, 0, 0, n); buffer.addFrom (0, start, stereo, 1, 0, n); buffer.applyGain (0, start, n, 0.5f); }
         for (int c = 2; c < nOut; ++c) buffer.clear (c, start, n);
     }
     inPeak.store (std::max (inPeak.load(), inPk));
     outPeak.store (std::max (outPeak.load(), outPk));
+}
+
+//==============================================================================
+void ZojoRigProcessor::playGreeting (const juce::File& file)
+{
+    juce::AudioFormatManager fm; fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (file));
+    if (reader == nullptr || reader->sampleRate <= 0) return;
+    const int len = (int) std::min<juce::int64> (reader->lengthInSamples, (juce::int64) (reader->sampleRate * 10.0)); // max 10 s
+    if (len <= 0) return;
+    juce::AudioBuffer<float> raw (2, len);
+    reader->read (&raw, 0, len, 0, true, true);   // mono files fill both channels
+
+    const double ratio = reader->sampleRate / sr;
+    const int outLen = (int) ((double) len / ratio);
+    juce::AudioBuffer<float> out (2, outLen);
+    for (int c = 0; c < 2; ++c)
+    {
+        juce::LagrangeInterpolator interp;
+        interp.process (ratio, raw.getReadPointer (c), out.getWritePointer (c), outLen, len, 0);
+    }
+    const float pk = out.getMagnitude (0, outLen);
+    if (pk > 0.9f) out.applyGain (0.9f / pk);    // keep loud clips from clipping
+    out.applyGainRamp (0, std::min (outLen, 64), 0.0f, 1.0f);
+
+    const juce::SpinLock::ScopedLockType lock (greetLock);
+    greetBuf = std::move (out);
+    greetPos = 0;
 }
 
 //==============================================================================

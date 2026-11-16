@@ -6,7 +6,11 @@ Guitar amp simulator: standalone Windows app + VST3 plugin, built with [JUCE](ht
 
 **Signal chain:** input (channel select) → virtual tuning → noise gate → compressor → overdrive → fuzz →
 amp (7 models, 4× oversampled) → cabinet (3 sims or your own IR) → graphic EQ → doubler → chorus → phaser →
-delay → reverb → volume. Built-in tuner, factory + user presets.
+delay → reverb → volume. Built-in tuner, 36 level-matched factory presets + user presets.
+
+**Player:** a Now Playing panel that shows and controls whatever music app is playing on Windows
+(system media controls), and a file player with pitch-preserving slow-down, key change and A–B looping
+(time-stretch by [Signalsmith Stretch](https://github.com/Signalsmith-Audio/signalsmith-stretch), MIT).
 
 ## Getting the app (no coding tools needed)
 Every push to GitHub builds Windows automatically:
@@ -28,6 +32,8 @@ Output: `build/ZojoRig_artefacts/Release/Standalone/ZOJO RIG.exe` and `.../VST3/
 - `Source/Dsp.h` – amp, cab, gate, pitch shifter, doubler, chorus, delay building blocks
 - `Source/PluginProcessor.*` – parameters and the audio chain
 - `Source/Presets.*` – factory banks and user preset files
+- `Source/Player.*` – file player (decode, resample, time-stretch, A–B loop)
+- `Source/NowPlaying*` – Windows media controls (C++/WinRT) + non-Windows stub
 - `Source/PluginEditor.*`, `Source/UI/*` – the dark ZOJO interface
 - `Tests/TestMain.cpp` – offline test runner (`-DZOJO_BUILD_TESTS=ON`)
 
