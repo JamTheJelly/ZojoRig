@@ -66,6 +66,9 @@ set(ZOJO_SOURCES
     Source/UI/Flames.cpp)
 if(WIN32)
     list(APPEND ZOJO_SOURCES Source/NowPlayingWin.cpp)   # Windows media controls (C++/WinRT)
+    # C++/WinRT needs real C++20 coroutines; newer MSVC rejects the old experimental ones under C++17
+    set_source_files_properties(Source/NowPlayingWin.cpp PROPERTIES COMPILE_OPTIONS "/std:c++20"
+        COMPILE_DEFINITIONS _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
 else()
     list(APPEND ZOJO_SOURCES Source/NowPlayingStub.cpp)
 endif()
